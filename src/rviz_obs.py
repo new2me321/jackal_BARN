@@ -17,7 +17,6 @@ cwd = os.getcwd()
 
 def cylinder_pose_callback(msg):
     # Find the index of the cylinders in the ModelStates message
-
     cylinder_indices = [msg.name.index(
         'unit_cylinder_{}'.format(i)) for i in range(len(msg.name)-3)]
 
@@ -42,7 +41,6 @@ def visualize_obstacles():
         marker_msg.action = Marker.ADD
 
         # Do transformations
-
         r, p, y = euler_from_quaternion([marker_msg.pose.orientation.x, marker_msg.pose.orientation.y,
                                         marker_msg.pose.orientation.z, marker_msg.pose.orientation.w])
         Q = quaternion_from_euler(r, p, y-1.57)
@@ -53,7 +51,7 @@ def visualize_obstacles():
         transform.transform.rotation.z = Q[2]
         transform.transform.rotation.w = Q[3]
 
-        # create Vector3Stamped object for original pose
+        # We will use Vector3Stamped object for original pose
         v_orig = Vector3Stamped()
         v_orig.header.stamp = rospy.Time.now()
         v_orig.header.frame_id = 'map'
@@ -61,7 +59,7 @@ def visualize_obstacles():
         v_orig.vector.y = cylinder_poses[i].position.y
         v_orig.vector.z = 0.25
 
-        # transform Vector3Stamped object using Transform object
+        # transform Vector3Stamped
         v_transformed = do_transform_vector3(v_orig, transform)
 
         marker_msg.pose.position = v_transformed.vector
@@ -86,20 +84,20 @@ def visualize_obstacles():
         marker_pub.publish(marker_msg)
 
 
+get_cylinder_poses = False
 if __name__ == '__main__':
     # Initialize the ROS node
     rospy.init_node('cylinder_marker_publisher')
     rospy.loginfo_once('visualizing obstacles')
 
-    # Create a ROS publisher for the cylinder markers
-    marker_pub = rospy.Publisher('/cylinder_markers', Marker, queue_size=10)
-    loop_rate = 10
-    # Subscribe to the Gazebo model states topic
-    # rospy.Subscriber('/gazebo/model_states', ModelStates, cylinder_pose_callback)
-    while not rospy.is_shutdown():
-        visualize_obstacles()
-        # rospy.sleep(1)
-        # rospy.spin()
-
-    # Spin the node
-    # rospy.spin()
+    if get_cylinder_poses == True:
+        # Subscribe to the Gazebo model states topic
+        rospy.Subscriber('/gazebo/model_states', ModelStates, cylinder_pose_callback)
+        rospy.spin()
+    else:
+        marker_pub = rospy.Publisher('/cylinder_markers', Marker, queue_size=10)
+        loop_rate = 10
+        while not rospy.is_shutdown():
+            visualize_obstacles()
+            # rospy.sleep(1)
+            # rospy.spin()
