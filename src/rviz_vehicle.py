@@ -2,6 +2,7 @@
 
 import rospy
 import os
+import sys
 import numpy as np
 from tf.transformations import quaternion_from_euler
 from visualization_msgs.msg import Marker
@@ -10,13 +11,19 @@ from sensor_msgs.msg import PointCloud
 
 
 cwd = os.getcwd()
-jackal_odometry = np.load(os.path.join(cwd, "data/jackal_odometry.npy"))
-obs_points = np.load(os.path.join(cwd, "data/original_pointclouds.npy"))
+args = sys.argv[1:]
+world_no = args[0] # world number
+directory = "data/" + str(world_no) + "/"
+
+fname1 = os.path.join(cwd, directory + "jackal_odometry_0.npy")
+fname2 = os.path.join(cwd, directory + "downsampled_pointclouds_0.npy")
+jackal_odometry = np.load(fname1)
+obs_points = np.load(fname2)
 
 rospy.init_node('robot_marker_publisher')
 
 robot_marker_pub = rospy.Publisher('robot_visualizer', Marker, queue_size=1)
-pcl_pub = rospy.Publisher('my_point_cloud_topic', PointCloud, queue_size=10)
+pcl_pub = rospy.Publisher('pointcloud_downsampled', PointCloud, queue_size=10)
 
 loop_rate = 10  # in hertz
 x_offset = 3  # -2

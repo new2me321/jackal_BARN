@@ -5,7 +5,7 @@ from gazebo_msgs.msg import ModelStates
 from visualization_msgs.msg import Marker
 import numpy as np
 import os
-
+import sys
 from tf.transformations import quaternion_from_euler
 from tf.transformations import euler_from_quaternion
 from tf2_geometry_msgs import do_transform_vector3
@@ -13,9 +13,28 @@ from geometry_msgs.msg import Pose, TransformStamped, Vector3Stamped
 
 
 cwd = os.getcwd()
+args = sys.argv[1:]
+world_no = args[0] # world number
+if len(args) > 1:
+    try:
+        get_cylinder_poses = int(args[1])
+    except:
+        get_cylinder_poses = 1
 
+    if get_cylinder_poses == 1:
+        get_cylinder_poses = True
+    else:
+        get_cylinder_poses = False
+else:
+    get_cylinder_poses = False
+directory = "data/" + str(world_no) + "/"
+if not os.path.exists(directory):
+    os.makedirs(directory)
+
+fname = os.path.join(cwd, directory + "obstacle_poses.npy")
 
 def cylinder_pose_callback(msg):
+    global fname
     # Find the index of the cylinders in the ModelStates message
     cylinder_indices = [msg.name.index(
         'unit_cylinder_{}'.format(i)) for i in range(len(msg.name)-3)]
@@ -23,12 +42,13 @@ def cylinder_pose_callback(msg):
     # Extract the poses of the cylinders
     cylinder_poses = [msg.pose[index] for index in cylinder_indices]
 
-    np.save(os.path.join(cwd, "data/obstacle_poses.npy"), cylinder_poses)
+    np.save(fname, cylinder_poses)
 
 
 def visualize_obstacles():
-    cylinder_poses = np.load(os.path.join(
-        cwd, "data/obstacle_poses.npy"), allow_pickle=True)
+    global fname
+
+    cylinder_poses = np.load(fname, allow_pickle=True)
 
     # Create a ROS Marker message for each cylinder
     marker_msgs = []
@@ -84,17 +104,18 @@ def visualize_obstacles():
         marker_pub.publish(marker_msg)
 
 
-get_cylinder_poses = False
 if __name__ == '__main__':
     # Initialize the ROS node
     rospy.init_node('cylinder_marker_publisher')
-    rospy.loginfo_once('visualizing obstacles')
 
     if get_cylinder_poses == True:
+        rospy.loginfo_once('saving obstacles poses from Gazebo')
         # Subscribe to the Gazebo model states topic
         rospy.Subscriber('/gazebo/model_states', ModelStates, cylinder_pose_callback)
         rospy.spin()
+        print("Saved!")
     else:
+        rospy.loginfo_once('visualizing obstacles')
         marker_pub = rospy.Publisher('/cylinder_markers', Marker, queue_size=10)
         loop_rate = 10
         while not rospy.is_shutdown():

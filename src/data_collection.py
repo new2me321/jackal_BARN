@@ -11,7 +11,7 @@ from tf.transformations import euler_from_quaternion
 from sensor_msgs.msg import PointCloud
 import message_filters
 from nav_msgs.msg import Odometry
-
+import sys
 import open3d
 import os
 
@@ -34,17 +34,15 @@ xyz = np.random.rand(720, 3)
 
 
 jackal_velocities = []
-closet_pointclouds_used_for_planning_vehicle = []
 original_pointclouds = []
 downsampled_points = []
-jackal_poses = []
 jackal_orientation = []
 jackal_odometry = []
 
 
 def odomCallback(odom_msg, pointcloud):
 
-    global is_received, odom_mutex, obstacle_points_vehicle, jackal_poses, xyz, num_laser_points, num_down_sampled
+    global is_received, odom_mutex, obstacle_points_vehicle, xyz, num_laser_points, num_down_sampled
 
     tf_listener = buffer.lookup_transform(
         odom_msg.header.frame_id, pointcloud.header.frame_id, rospy.Time(), rospy.Duration(1.0))
@@ -65,7 +63,7 @@ def odomCallback(odom_msg, pointcloud):
 
     # getting original pointclouds data
     msg_len = len(pointcloud.points)
-    print(msg_len)
+    # print(msg_len)
     pointcloud_mutex.acquire()
     increment_value = 1
     inner_counter = 0
@@ -84,7 +82,7 @@ def odomCallback(odom_msg, pointcloud):
     xyz[idxes, 0] = xyz[0, 0]
     xyz[idxes, 1] = xyz[0, 1]
 
-    print("before:", xyz[:, 0], xyz[:, 1])
+    # print("before:", xyz[:, 0], xyz[:, 1])
 
     # now transform pointclouds
     xyz_transformed = np.hstack((xyz, np.ones((xyz.shape[0], 1))))
@@ -107,7 +105,7 @@ def odomCallback(odom_msg, pointcloud):
     y_obs_down_sampled[0:num_down_sampled_points, 0] = downpcd_array[:, 1]
     obstacle_points_vehicle = np.hstack(
         (x_obs_down_sampled, y_obs_down_sampled))
-    print("after:", obstacle_points_vehicle)
+    # print("after:", obstacle_points_vehicle)
 
     pointcloud_mutex.release()
     inner_counter = 0
@@ -130,8 +128,6 @@ def odomCallback(odom_msg, pointcloud):
     # kk
     downsampled_points.append(obstacle_points_vehicle)
 
-    jackal_poses.append([odom_msg.pose.pose.position.x,
-                        odom_msg.pose.pose.position.y])
     jackal_odometry.append(
         [odom_msg.pose.pose.position.x, odom_msg.pose.pose.position.y, jackal_yaw])
     odom_mutex.release()
@@ -140,6 +136,8 @@ def odomCallback(odom_msg, pointcloud):
 if __name__ == "__main__":
 
     rospy.init_node('data_collection')
+    args = sys.argv[1:]
+    world_no = args[0]  # world number
     rospy.loginfo("data collection initialized!")
     # rospack = rospkg.RosPack()
 
@@ -156,12 +154,31 @@ if __name__ == "__main__":
     ts.registerCallback(odomCallback)
 
     rospy.spin()
-    # print("\n",jackal_poses)
-    np.save(os.path.join(cwd, "data/jackal_odometry.npy"), jackal_odometry)
-    np.save(os.path.join(cwd, "data/jackal_poses.npy"), jackal_poses)
-    np.save(os.path.join(cwd, "data/closet_pointclouds_used_for_planning_vehicle.npy"),
-            closet_pointclouds_used_for_planning_vehicle)
-    np.save(os.path.join(cwd, "data/original_pointclouds.npy"), downsampled_points)
+    # print("\n",jackal_odometry)
+
+    directory = "data/" + str(world_no) + "/"
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
+    fname1 = os.path.join(cwd, directory + "jackal_odometry_0.npy")
+    fname2 = os.path.join(cwd, directory + "downsampled_pointclouds_0.npy")
+
+    if os.path.isfile(fname1):
+        # generate new file numbered if it already exists
+        count = 1
+        while os.path.isfile(f"{fname1.split('.')[0]}_{count}.npy"):
+            count += 1
+        fname1 = f"{fname1.split('.')[0]}_{count}.npy"
+
+    if os.path.isfile(fname2):
+        # generate new file numbered if it already exists
+        count = 1
+        while os.path.isfile(f"{fname2.split('.')[0]}_{count}.npy"):
+            count += 1
+        fname2 = f"{fname2.split('.')[0]}_{count}.npy"
+
+    np.save(fname1, jackal_odometry)
+    np.save(fname2, downsampled_points)
     print(np.array(downsampled_points).shape)
     print("Files were saved")
 
