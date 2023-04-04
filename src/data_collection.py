@@ -53,7 +53,6 @@ def odomCallback(odom_msg, pointcloud):
     transformation_matrix = tf.transformations.concatenate_matrices(
         tf.transformations.translation_matrix(trans), tf.transformations.quaternion_matrix(rot))
 
-    # print("transformation", tf_listener)
 
     odom_mutex.acquire()
 
@@ -63,7 +62,6 @@ def odomCallback(odom_msg, pointcloud):
 
     # getting original pointclouds data
     msg_len = len(pointcloud.points)
-    # print(msg_len)
     pointcloud_mutex.acquire()
     increment_value = 1
     inner_counter = 0
@@ -78,16 +76,14 @@ def odomCallback(odom_msg, pointcloud):
     xyz[:, 1] = y_obs_pointcloud_vehicle.flatten()
     xyz[:, 2] = 1
 
+    # replace all points greater than 300m
     idxes = np.argwhere(xyz[:, :] >= 300)
     xyz[idxes, 0] = xyz[0, 0]
     xyz[idxes, 1] = xyz[0, 1]
 
-    # print("before:", xyz[:, 0], xyz[:, 1])
-
     # now transform pointclouds
     xyz_transformed = np.hstack((xyz, np.ones((xyz.shape[0], 1))))
     xyz_transformed = np.dot(transformation_matrix, xyz_transformed.T).T[:, :3]
-    # print("Transform done")
 
     # downsample transformed pointclouds
     pcd = open3d.geometry.PointCloud()
@@ -96,20 +92,19 @@ def odomCallback(odom_msg, pointcloud):
     downpcd_array = np.asarray(downpcd.points)
 
     num_down_sampled_points = downpcd_array[:, 0].shape[0]
-    # print (downpcd_array)
-    # print(num_down_sampled_points)
 
+    # create 1D array of size 200
     x_obs_down_sampled = np.ones((200, 1)) * 1000
     y_obs_down_sampled = np.ones((200, 1)) * 1000
     x_obs_down_sampled[0:num_down_sampled_points, 0] = downpcd_array[:, 0]
     y_obs_down_sampled[0:num_down_sampled_points, 0] = downpcd_array[:, 1]
     obstacle_points_vehicle = np.hstack(
         (x_obs_down_sampled, y_obs_down_sampled))
-    # print("after:", obstacle_points_vehicle)
 
     pointcloud_mutex.release()
     inner_counter = 0
 
+    # replace all points greater than 300m
     idxes = np.argwhere(obstacle_points_vehicle[:, :] >= 300)
     obstacle_points_vehicle[idxes, 0] = obstacle_points_vehicle[0, 0]
     obstacle_points_vehicle[idxes, 1] = obstacle_points_vehicle[0, 1]
@@ -117,19 +112,10 @@ def odomCallback(odom_msg, pointcloud):
                                                             0] - odom_msg.pose.pose.position.x
     obstacle_points_vehicle[:, 1] = obstacle_points_vehicle[:,
                                                             1] - odom_msg.pose.pose.position.y
-
-    # kk
-    # print(f"obs {obstacle_points_vehicle}")
-
-    # apply transformation to the point cloud
-    idxes = np.argwhere(obstacle_points_vehicle[:, :] >= 150)
-    # Gather data
-    # print(idxes)
-    # kk
+    # gather data
     downsampled_points.append(obstacle_points_vehicle)
-
-    jackal_odometry.append(
-        [odom_msg.pose.pose.position.x, odom_msg.pose.pose.position.y, jackal_yaw])
+    jackal_odometry.append([odom_msg.pose.pose.position.x, odom_msg.pose.pose.position.y, jackal_yaw])
+    
     odom_mutex.release()
 
 
