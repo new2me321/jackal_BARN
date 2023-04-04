@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<launch>
+    <include file="$(find jackal_nn)/launch/laser_assembler.launch"/>
+    
+
+    <node name="laserscan_to_pointcloud" pkg="jackal_nn" type="laserscan_to_pointcloud.py"  output="screen" >
+        <remap from="/scan" to="/front/scan"/>
+    </node>
+
+</launch>
