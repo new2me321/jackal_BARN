@@ -2,7 +2,7 @@
 import time
 import numpy as np
 import rospy
-import rospkg
+# import rospkg
 import tf2_ros
 import tf
 import threading
@@ -30,11 +30,6 @@ publish_traj_mutex = threading.Lock()
 num_laser_points = 720
 num_down_sampled = 200
 
-x_obs_pointcloud_vehicle = np.ones((num_laser_points, 1)) * 100
-y_obs_pointcloud_vehicle = np.ones((num_laser_points, 1)) * 100
-
-x_obs_down_sampled = np.ones((num_down_sampled, 1)) * 100
-y_obs_down_sampled = np.ones((num_down_sampled, 1)) * 100
 xyz = np.random.rand(720, 3)
 
 
@@ -49,14 +44,18 @@ jackal_odometry = []
 
 def odomCallback(odom_msg, pointcloud):
 
-    global is_received, odom_mutex, obstacle_points_vehicle, jackal_poses
+    global is_received, odom_mutex, obstacle_points_vehicle, jackal_poses, xyz, num_laser_points, num_down_sampled
 
-    tf_listener = buffer.lookup_transform(odom_msg.header.frame_id, pointcloud.header.frame_id, rospy.Time(), rospy.Duration(1.0))
-    trans = [tf_listener.transform.translation.x, tf_listener.transform.translation.y, tf_listener.transform.translation.z]
-    rot = [tf_listener.transform.rotation.x, tf_listener.transform.rotation.y, tf_listener.transform.rotation.z, tf_listener.transform.rotation.w]
-    transformation_matrix = tf.transformations.concatenate_matrices(tf.transformations.translation_matrix(trans), tf.transformations.quaternion_matrix(rot))
+    tf_listener = buffer.lookup_transform(
+        odom_msg.header.frame_id, pointcloud.header.frame_id, rospy.Time(), rospy.Duration(1.0))
+    trans = [tf_listener.transform.translation.x,
+             tf_listener.transform.translation.y, tf_listener.transform.translation.z]
+    rot = [tf_listener.transform.rotation.x, tf_listener.transform.rotation.y,
+           tf_listener.transform.rotation.z, tf_listener.transform.rotation.w]
+    transformation_matrix = tf.transformations.concatenate_matrices(
+        tf.transformations.translation_matrix(trans), tf.transformations.quaternion_matrix(rot))
 
-    print("transformation", tf_listener)
+    # print("transformation", tf_listener)
 
     odom_mutex.acquire()
 
@@ -66,25 +65,32 @@ def odomCallback(odom_msg, pointcloud):
 
     # getting original pointclouds data
     msg_len = len(pointcloud.points)
+    print(msg_len)
     pointcloud_mutex.acquire()
     increment_value = 1
     inner_counter = 0
-
+    x_obs_pointcloud_vehicle = np.ones((num_laser_points, 1)) * 1000
+    y_obs_pointcloud_vehicle = np.ones((num_laser_points, 1)) * 1000
     for nn in range(0, msg_len, increment_value):
         x_obs_pointcloud_vehicle[inner_counter] = pointcloud.points[nn].x
         y_obs_pointcloud_vehicle[inner_counter] = pointcloud.points[nn].y
         inner_counter += 1
-    
-    
+
     xyz[:, 0] = x_obs_pointcloud_vehicle.flatten()
     xyz[:, 1] = y_obs_pointcloud_vehicle.flatten()
     xyz[:, 2] = 1
 
+    idxes = np.argwhere(xyz[:, :] >= 300)
+    xyz[idxes, 0] = xyz[0, 0]
+    xyz[idxes, 1] = xyz[0, 1]
+
+    print("before:", xyz[:, 0], xyz[:, 1])
+
     # now transform pointclouds
     xyz_transformed = np.hstack((xyz, np.ones((xyz.shape[0], 1))))
     xyz_transformed = np.dot(transformation_matrix, xyz_transformed.T).T[:, :3]
-    print("Transform done")
-    
+    # print("Transform done")
+
     # downsample transformed pointclouds
     pcd = open3d.geometry.PointCloud()
     pcd.points = open3d.utility.Vector3dVector(xyz_transformed)
@@ -92,27 +98,36 @@ def odomCallback(odom_msg, pointcloud):
     downpcd_array = np.asarray(downpcd.points)
 
     num_down_sampled_points = downpcd_array[:, 0].shape[0]
+    # print (downpcd_array)
+    # print(num_down_sampled_points)
+
     x_obs_down_sampled = np.ones((200, 1)) * 1000
     y_obs_down_sampled = np.ones((200, 1)) * 1000
     x_obs_down_sampled[0:num_down_sampled_points, 0] = downpcd_array[:, 0]
     y_obs_down_sampled[0:num_down_sampled_points, 0] = downpcd_array[:, 1]
     obstacle_points_vehicle = np.hstack(
         (x_obs_down_sampled, y_obs_down_sampled))
+    print("after:", obstacle_points_vehicle)
+
     pointcloud_mutex.release()
     inner_counter = 0
 
-    idxes = np.argwhere(obstacle_points_vehicle[:, :] >= 150)
-    obstacle_points_vehicle[idxes, 0] = obstacle_points_vehicle[20, 0]
-    obstacle_points_vehicle[idxes, 1] = obstacle_points_vehicle[20, 1]
+    idxes = np.argwhere(obstacle_points_vehicle[:, :] >= 300)
+    obstacle_points_vehicle[idxes, 0] = obstacle_points_vehicle[0, 0]
+    obstacle_points_vehicle[idxes, 1] = obstacle_points_vehicle[0, 1]
     obstacle_points_vehicle[:, 0] = obstacle_points_vehicle[:,
                                                             0] - odom_msg.pose.pose.position.x
     obstacle_points_vehicle[:, 1] = obstacle_points_vehicle[:,
                                                             1] - odom_msg.pose.pose.position.y
-    print(f"obs {obstacle_points_vehicle.shape}")
+
+    # kk
+    # print(f"obs {obstacle_points_vehicle}")
 
     # apply transformation to the point cloud
-
+    idxes = np.argwhere(obstacle_points_vehicle[:, :] >= 150)
     # Gather data
+    # print(idxes)
+    # kk
     downsampled_points.append(obstacle_points_vehicle)
 
     jackal_poses.append([odom_msg.pose.pose.position.x,
@@ -126,11 +141,11 @@ if __name__ == "__main__":
 
     rospy.init_node('data_collection')
     rospy.loginfo("data collection initialized!")
-    rospack = rospkg.RosPack()
-    
+    # rospack = rospkg.RosPack()
+
     buffer = tf2_ros.Buffer()
     tf_listener = tf2_ros.TransformListener(buffer)
-    
+
     jackal_pointcloud_sub = message_filters.Subscriber(
         '/pointcloud', PointCloud)
     jackal_odom_sub = message_filters.Subscriber(
