@@ -85,10 +85,12 @@ def odomCallback(odom_msg, pointcloud):
     xyz_transformed = np.hstack((xyz, np.ones((xyz.shape[0], 1))))
     xyz_transformed = np.dot(transformation_matrix, xyz_transformed.T).T[:, :3]
 
+    start_time = time.time()
     # downsample transformed pointclouds
     pcd = open3d.geometry.PointCloud()
     pcd.points = open3d.utility.Vector3dVector(xyz_transformed)
     downpcd = pcd.voxel_down_sample(voxel_size=0.9)
+    print("Downsample Computation Time: ", time.time() - start_time)
     downpcd_array = np.asarray(downpcd.points)
 
     num_down_sampled_points = downpcd_array[:, 0].shape[0]
