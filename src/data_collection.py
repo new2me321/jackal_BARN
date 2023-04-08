@@ -9,11 +9,13 @@ import threading
 from nav_msgs.msg import Odometry
 from tf.transformations import euler_from_quaternion
 from sensor_msgs.msg import PointCloud
+from geometry_msgs.msg import Twist
 import message_filters
 from nav_msgs.msg import Odometry
 import sys
 import open3d
 import os
+
 
 cwd = os.getcwd()
 
@@ -40,9 +42,9 @@ jackal_orientation = []
 jackal_odometry = []
 
 
-def odomCallback(odom_msg, pointcloud):
+def odomCallback(odom_msg, pointcloud, cmd_vel):
 
-    global is_received, odom_mutex, obstacle_points_vehicle, xyz, num_laser_points, num_down_sampled
+    global is_received, odom_mutex, obstacle_points_vehicle, xyz, num_laser_points, num_down_sampled, jackal_velocities
 
     tf_listener = buffer.lookup_transform(
         odom_msg.header.frame_id, pointcloud.header.frame_id, rospy.Time(), rospy.Duration(1.0))
@@ -59,6 +61,9 @@ def odomCallback(odom_msg, pointcloud):
     jackal_q = odom_msg.pose.pose.orientation
     jackal_list = [jackal_q.x, jackal_q.y, jackal_q.z, jackal_q.w]
     (jackal_roll, jackal_pitch, jackal_yaw) = euler_from_quaternion(jackal_list)
+
+    x_vel = cmd_vel.linear.x
+    ang_z_vel = cmd_vel.angular.z
 
     # getting original pointclouds data
     msg_len = len(pointcloud.points)
@@ -90,7 +95,7 @@ def odomCallback(odom_msg, pointcloud):
     pcd = open3d.geometry.PointCloud()
     pcd.points = open3d.utility.Vector3dVector(xyz_transformed)
     downpcd = pcd.voxel_down_sample(voxel_size=0.9)
-    print("Downsample Computation Time: ", time.time() - start_time)
+    
     downpcd_array = np.asarray(downpcd.points)
 
     num_down_sampled_points = downpcd_array[:, 0].shape[0]
@@ -114,9 +119,13 @@ def odomCallback(odom_msg, pointcloud):
                                                             0] - odom_msg.pose.pose.position.x
     obstacle_points_vehicle[:, 1] = obstacle_points_vehicle[:,
                                                             1] - odom_msg.pose.pose.position.y
+    
+    print("Downsample Computation Time: ", time.time() - start_time)
+
     # gather data
     downsampled_points.append(obstacle_points_vehicle)
     jackal_odometry.append([odom_msg.pose.pose.position.x, odom_msg.pose.pose.position.y, jackal_yaw])
+    jackal_velocities.append([x_vel, ang_z_vel])
     
     odom_mutex.release()
 
@@ -136,9 +145,10 @@ if __name__ == "__main__":
         '/pointcloud', PointCloud)
     jackal_odom_sub = message_filters.Subscriber(
         '/odometry/filtered', Odometry)
+    jackal_vel_sub = message_filters.Subscriber('/cmd_vel', Twist)
 
     ts = message_filters.ApproximateTimeSynchronizer(
-        [jackal_odom_sub, jackal_pointcloud_sub], 1, 1, allow_headerless=True)
+        [jackal_odom_sub, jackal_pointcloud_sub, jackal_vel_sub], 1, 1, allow_headerless=True)
     ts.registerCallback(odomCallback)
 
     rospy.spin()
@@ -150,6 +160,7 @@ if __name__ == "__main__":
 
     fname1 = os.path.join(cwd, directory + "jackal_odometry_0.npy")
     fname2 = os.path.join(cwd, directory + "downsampled_pointclouds_0.npy")
+    fname3 = os.path.join(cwd, directory + "jackal_velocitiies_0.npy")
 
     if os.path.isfile(fname1):
         # generate new file numbered if it already exists
@@ -167,6 +178,7 @@ if __name__ == "__main__":
 
     np.save(fname1, jackal_odometry)
     np.save(fname2, downsampled_points)
+    np.save(fname3, jackal_velocities)
     print(np.array(downsampled_points).shape)
     print("Files were saved")
 
